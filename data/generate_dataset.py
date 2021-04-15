@@ -19,40 +19,38 @@ parser.add_argument('--sample-freq', type=int, default=100,
 parser.add_argument('--n-balls', type=int, default=5,
                     help='Number of balls in the simulation.')
 
-def generate_data(args, sim, mode):
-	print(f"Generating {args.num_train} {mode} simulations")
-	
-	suffix = f'_springs_{str(args.n_balls)}'
-	
-	save_path_position = f'samples/loc_{mode}_{suffix}.npy'
-	save_path_velocity = f'samples/vel_{mode}_{suffix}.npy'
-	save_path_edges = f'samples/edges_{mode}_{suffix}.npy'
 
-	
-	all_positions = []
-	all_velocities = []
-	all_edges = []
-	
-	for i in range(args.num_train):
-		positions, velocities, edges = sim.sample_trajectory(T=args.length,
-															 sample_freq=args.sample_freq)
-		all_positions.append(positions)
-		all_velocities.append(velocities)
-		all_edges.append(edges)
-	
-	
-	np.save(save_path_position, all_positions)
-	np.save(save_path_velocity, all_velocities)
-	np.save(save_path_edges, all_edges)
+def generate_data(args, sim, mode):
+    print(f"Generating {args.num_train} {mode} simulations")
+    suffix = f'_springs_{str(args.n_balls)}'
+    save_path_position = f'samples/loc_{mode}_{suffix}.npy'
+    save_path_velocity = f'samples/vel_{mode}_{suffix}.npy'
+    save_path_edges = f'samples/edges_{mode}_{suffix}.npy'
+
+    all_positions = []
+    all_velocities = []
+    all_edges = []
+
+    for i in range(args.num_train):
+        positions, velocities, edges = sim.sample_trajectory(total_time_steps=args.length,
+                                                             sample_freq=args.sample_freq)
+        all_positions.append(positions)
+        all_velocities.append(velocities)
+        all_edges.append(edges)
+
+    np.save(save_path_position, all_positions)
+    np.save(save_path_velocity, all_velocities)
+    np.save(save_path_edges, all_edges)
+
 
 def main():
-	args = parser.parse_args()
-	sim = Spring(num_particles=5)
-	
-	generate_data(args, sim, 'train')
-	generate_data(args, sim, 'test')
-	generate_data(args, sim, 'val')
-	
+    args = parser.parse_args()
+    sim = Spring(num_particles=5)
+
+    generate_data(args, sim, 'train')
+    generate_data(args, sim, 'test')
+    generate_data(args, sim, 'val')
+
 
 if __name__ == "__main__":
-	main()
+    main()
