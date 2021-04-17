@@ -1,6 +1,7 @@
 import time
 import argparse
 import numpy as np
+import pandas as pd
 from synthetic_sim import Spring
 
 parser = argparse.ArgumentParser()
@@ -20,36 +21,50 @@ parser.add_argument('--n-balls', type=int, default=5,
                     help='Number of balls in the simulation.')
 
 
-def generate_data(args, sim, mode):
-    print(f"Generating {args.num_train} {mode} simulations")
-    suffix = f'_springs_{str(args.n_balls)}'
-    save_path_position = f'samples/loc_{mode}_{suffix}.npy'
-    save_path_velocity = f'samples/vel_{mode}_{suffix}.npy'
-    save_path_edges = f'samples/edges_{mode}_{suffix}.npy'
+def generate_data_schema():
+    schema = {
+        'label': ['positions', 'velocity', 'edges'],
+        'descriptions': ['postions of all particles in x and y cordinates',
+                         'velocity of all particles in x and y cordinates',
+                         'Causal relationship between particles'],
+        'dimensions': [('2', 'num_of_particles'), ('2', 'num_of_particles'), ('num_of_particles', 'num_of_particles')]
+    }
 
-    all_positions = []
-    all_velocities = []
-    all_edges = []
+    df = pd.DataFrame(schema).set_index('label')
+
+
+def generate_data(args, dynamics):
+
+    print(f"Generating {args.num_train} {dynamics} simulations")
+    trajectories = []
+    particles = []
+    dynamics = []
 
     for i in range(args.num_train):
-        positions, velocities, edges = sim.sample_trajectory(total_time_steps=args.length,
-                                                             sample_freq=args.sample_freq)
-        all_positions.append(positions)
-        all_velocities.append(velocities)
-        all_edges.append(edges)
+        t = time.time()
+        sim = Spring(num_particles=5)
+        data_frame = sim.sample_trajectory(total_time_steps=args.length,
+                                           sample_freq=args.sample_freq)
+        trajectories.append(data_frame)
+        particles.append(5)
+        dynamics.append('periodic')
+        print(f"Simulation {i}, time: {time.time() - t}")
 
-    np.save(save_path_position, all_positions)
-    np.save(save_path_velocity, all_velocities)
-    np.save(save_path_edges, all_edges)
+    data = {
+        'trajectories': trajectories,
+        'particles': particles,
+        'dynamics': dynamics,
+        'simulation_id': [f'simulation_{i}' for i in range(args.num_train)]
+    }
+
+    df = pd.DataFrame(data).set_index('simulation_id')
+    df.to_pickle('samples/dyari.pkl')
+    print(f"Simulations saved to samples/dyari.csv")
 
 
 def main():
     args = parser.parse_args()
-    sim = Spring(num_particles=5)
-
-    generate_data(args, sim, 'train')
-    generate_data(args, sim, 'test')
-    generate_data(args, sim, 'val')
+    generate_data(args=args, dynamics='periodic')
 
 
 if __name__ == "__main__":

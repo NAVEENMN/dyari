@@ -22,6 +22,8 @@ class Spring:
 		self.positions = []
 		self.velocities = []
 		self.edges = []
+
+		self.columns = [f'particle_{i}' for i in range(self.num_particles)]
 	
 	def _clamp(self, loc, vel):
 		"""
@@ -99,18 +101,25 @@ class Spring:
 		return _edges
 	
 	def sample_trajectory(self, total_time_steps=10000, sample_freq=10):
-		
+
+		# Data frame columns and index for particles
+		columns = [f'particle_{i}' for i in range(self.num_particles)]
+		index = ['x_cordinate', 'y_cordinate']
+
 		# Initialize causality between particles.
 		_edges = self.generate_edges()
-		self.edges.append(_edges)
-		
+
 		# Initialize the first position and velocity from a distribution
 		init_position, init_velocity = self.get_init_pos_velocity()
 		
 		# Adding initial position and velocity of particles to trajectory.
 		init_position, init_velocity = self._clamp(init_position, init_velocity)
-		self.positions.append(init_position)
-		self.velocities.append(init_velocity)
+		_position = pd.DataFrame(init_position, columns=columns, index=index)
+		_velocity = pd.DataFrame(init_velocity, columns=columns, index=index)
+		_edge = pd.DataFrame(_edges, columns=columns, index=columns)
+		self.positions.append(_position)
+		self.velocities.append(_velocity)
+		self.edges.append(_edge)
 		# self.tr.add_snap_shot(self._clamp(init_position, init_velocity))
 		
 		# Compute initial forces between particles.
@@ -136,16 +145,18 @@ class Spring:
 			
 			# Adding new position and velocity of particles to trajectory.
 			if i % sample_freq == 0:
-				self.positions.append(new_position)
-				self.velocities.append(velocity)
-				self.edges.append(_edges)
+				_position = pd.DataFrame(new_position, columns=columns, index=index)
+				_velocity = pd.DataFrame(velocity, columns=columns, index=index)
+				_edge = pd.DataFrame(_edges, columns=columns, index=columns)
+				self.positions.append(_position)
+				self.velocities.append(_velocity)
+				self.edges.append(_edge)
 
 			if i == 3000:
-				print("Updating causality for testing")
 				_edges = self.generate_edges()
 			
 			# Compute forces between particles
-			force_between_particles = self.get_force(edges, new_position)
+			force_between_particles = self.get_force(_edges, new_position)
 			
 			# Compute new velocity based on current velocity and forces between particles.
 			new_velocity = velocity + (self._delta_T * force_between_particles)
@@ -157,8 +168,19 @@ class Spring:
 			# Add noise to observations
 			current_position += np.random.randn(2, self.num_particles) * self.noise_var
 			velocity += np.random.randn(2, self.num_particles) * self.noise_var
-			
-		return self.positions, self.velocities, self.edges
+
+		# Compute energy of the system
+		kinetic_energies, potential_energies, total_energies = self.get_energy()
+		# construct data frame
+		trajectory = {
+			'positions': self.positions,
+			'velocity': self.velocities,
+			'edges': self.edges,
+			'kinetic_energy': kinetic_energies,
+			'potential_energy': potential_energies,
+			'total_energy': total_energies,
+		}
+		return pd.DataFrame(trajectory)
 	
 	def get_energy(self):
 		'''
@@ -170,26 +192,35 @@ class Spring:
 		
 		# Compute Kinetic Energy for each snap shot
 		# Kinetic energy = (1/2) m * v^2, here assume a unit mass
-		ek = lambda velocity: 0.5 * (velocity ** 2).sum()
+		ek = lambda velocity: 0.5 * (velocity ** 2).sum(axis=0)
 		kinetic_energies = [ek(_velocities) for _velocities in self.velocities]
-		
+		kinetic_energies = [pd.DataFrame({'kinetic_energy': ke, 'particles': self.columns}).set_index('particles') for ke in kinetic_energies]
+
 		# Compute Potential Energy at each snap shot
 		# potential energy = m * g * d, here assume a unit mass
 		# g represents interaction strength and h represents distance.
 		potential_energies = []
-		for position in positions:
-			_u = 0
-			_pos = position.T
+		for time_step, position in enumerate(self.positions):
+			_pos = position.T.to_numpy()
+			_u = []
 			for particle_index in range(0, self.num_particles):
-				position_fill_mat = np.full(_pos.shape, _pos[particle_index])
-				distances = np.sqrt(np.square(_pos - position_fill_mat).sum(axis=1))
-				_u += 0.5 * self.interaction_strength * np.dot(self.edges[particle_index], distances ** 2) / 2
-			potential_energies.append(_u)
+				particle_pos = position[f'particle_{particle_index}'].T.to_numpy()
+				position_fill_mat = np.full(_pos.shape, particle_pos)
+				distances = np.sqrt(np.square(position_fill_mat - _pos).sum(axis=1))
+				pe = np.dot(self.edges[time_step][f'particle_{particle_index}'], distances ** 2)
+				_u.append(0.5 * self.interaction_strength * pe)
+			potential_energies.append(pd.DataFrame({'potential_energy': _u, 'particles': self.columns}).set_index('particles'))
+
 
 		# Compute total energy of the system
-		total_energy = np.add(kinetic_energies, potential_energies)
-
-		return total_energy
+		total_energies = []
+		for time_step in range(len(potential_energies)):
+			total_en = kinetic_energies[time_step]['kinetic_energy'] + potential_energies[time_step]['potential_energy']
+			total_energies.append(pd.DataFrame({'total_energy': total_en, 'particles': self.columns}).set_index('particles'))
+		kinetic_energies = [ken.T for ken in kinetic_energies]
+		potential_energies = [pen.T for pen in potential_energies]
+		total_energies = [ten.T for ten in total_energies]
+		return kinetic_energies, potential_energies, total_energies
 	
 	def plot(self):
 		"""
@@ -260,10 +291,8 @@ class Spring:
 
 
 if __name__ == '__main__':
-	sim = Spring(num_particles=2)
+	sim = Spring(num_particles=3)
 	t = time.time()
-	positions, velocities, edges = sim.sample_trajectory(total_time_steps=5000,
-														 sample_freq=50)
+	data_frame = sim.sample_trajectory(total_time_steps=5000, sample_freq=50)
 	print("Simulation time: {}".format(time.time() - t))
-	# sim.get_energy()
 	# sim.create_gif()
