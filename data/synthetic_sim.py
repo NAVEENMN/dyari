@@ -5,13 +5,19 @@ import pandas as pd
 import seaborn as sns
 
 
+
 class Spring:
-	def __init__(self, num_particles=2, interaction_strength=.1):
+	def __init__(self, num_particles=2, interaction_strength=.1, dynamics='static', min_steps=50, max_steps=200):
+		np.random.seed(0)
 		self.num_particles = num_particles
+		self.interaction_strength = interaction_strength
+		self.dynamics = dynamics
+		self.min_steps = min_steps
+		self.max_steps = max_steps
+
 		self.box_size = 5.
 		self.loc_std = .5
 		self.vel_norm = .5
-		self.interaction_strength = interaction_strength
 		self.noise_var = 0.
 		
 		self.spring_prob = [0.5, 0.0, 0.5]
@@ -22,6 +28,7 @@ class Spring:
 		self.positions = []
 		self.velocities = []
 		self.edges = []
+		self.edge_counter = self.get_edge_counter(self.min_steps, self.max_steps+1)
 
 		self.columns = [f'particle_{i}' for i in range(self.num_particles)]
 	
@@ -48,7 +55,14 @@ class Spring:
 		vel[under] = np.abs(vel[under])
 		
 		return loc, vel
-	
+
+	def get_edge_counter(self, min_steps, max_steps):
+		counter = np.random.choice(list(range(min_steps, max_steps)), size=(self.num_particles, self.num_particles))
+		counter = np.tril(counter) + np.tril(counter, -1).T
+		np.fill_diagonal(counter, 0)
+		return counter
+
+
 	def get_init_pos_velocity(self):
 		"""
 		This function samples position and velocity from a distribution.
@@ -120,7 +134,6 @@ class Spring:
 		self.positions.append(_position)
 		self.velocities.append(_velocity)
 		self.edges.append(_edge)
-		# self.tr.add_snap_shot(self._clamp(init_position, init_velocity))
 		
 		# Compute initial forces between particles.
 		init_force_between_particles = self.get_force(_edges, init_position)
@@ -136,7 +149,9 @@ class Spring:
 		
 		velocity = get_velocity(init_velocity, init_force_between_particles)
 		current_position = init_position
-		
+
+		edges_counter = self.edge_counter
+
 		for i in range(1, total_time_steps):
 			
 			# Compute new position based on current velocity and positions.
@@ -152,9 +167,16 @@ class Spring:
 				self.velocities.append(_velocity)
 				self.edges.append(_edge)
 
-			if i == 3000:
-				_edges = self.generate_edges()
-			
+			# If causal graph is not static, flip causal edges when counter turns zero
+			if self.dynamics != 'static':
+				edges_counter -= 1
+				change_mask = np.where(edges_counter == 0, 1, 0)
+				if np.any(change_mask):
+					new_edges = np.where(_edges == 0, 1.0, 0)
+					_edges = np.where(change_mask == 1, new_edges, _edges)
+					new_counter = self.get_edge_counter(self.min_steps, self.max_steps+1)
+					edges_counter = np.where(change_mask == 1, new_counter, edges_counter)
+
 			# Compute forces between particles
 			force_between_particles = self.get_force(_edges, new_position)
 			
@@ -234,6 +256,7 @@ class Spring:
 		positions = [position for position in self.positions]
 		positions = np.asarray(positions)
 		for i in range(positions.shape[-1]):
+			print(positions[:, 0, i], positions[:, 1, i])
 			plt.plot(positions[:, 0, i], positions[:, 1, i])
 			plt.plot(positions[0, 0, i], positions[0, 1, i], 'd')
 		plt.figure()
@@ -291,8 +314,10 @@ class Spring:
 
 
 if __name__ == '__main__':
-	sim = Spring(num_particles=3)
+	sim = Spring(num_particles=2, dynamics='periodic', min_steps=50, max_steps=200)
 	t = time.time()
-	data_frame = sim.sample_trajectory(total_time_steps=5000, sample_freq=50)
+	data_frame = sim.sample_trajectory(total_time_steps=1000, sample_freq=10)
+	#sim.plot()
+	sim.create_gif()
 	print("Simulation time: {}".format(time.time() - t))
 	# sim.create_gif()

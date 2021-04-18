@@ -8,10 +8,6 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('--num-train', type=int, default=50,
                     help='Number of training simulations to generate.')
-parser.add_argument('--num-test', type=int, default=10000,
-                    help='Number of test simulations to generate.')
-parser.add_argument('--num-valid', type=int, default=10000,
-                    help='Number of validation simulations to generate.')
 
 parser.add_argument('--length', type=int, default=5000,
                     help='Length of trajectory.')
@@ -42,7 +38,7 @@ def generate_data(args, dynamics):
 
     for i in range(args.num_train):
         t = time.time()
-        sim = Spring(num_particles=5)
+        sim = Spring(num_particles=2)
         data_frame = sim.sample_trajectory(total_time_steps=args.length,
                                            sample_freq=args.sample_freq)
         trajectories.append(data_frame)
@@ -59,7 +55,7 @@ def generate_data(args, dynamics):
 
     df = pd.DataFrame(data).set_index('simulation_id')
     df.to_pickle('samples/dyari.pkl')
-    print(f"Simulations saved to samples/dyari.csv")
+    print(f"Simulations saved to samples/dyari.pkl")
 
 
 def main():
