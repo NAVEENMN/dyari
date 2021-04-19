@@ -1,25 +1,24 @@
-import os
-import numpy as np
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import torch
-from torch.autograd import Variable
-import pandas as pd
-from matplotlib import pyplot
-from pandas.plotting import lag_plot
-import seaborn as sns
-import math
 import random
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from matplotlib import pyplot
 
 dtype = torch.float
 device = torch.device("cpu")
-
 time_slice = 4
-particles = 2
+particles = 5
 features = 5
-trajectory_length = 50
+trajectory_length = 1000
+sample_freq = 10
 
-class Dataset():
+class Data:
     def __init__(self, batch_size=1, time_lag=4):
-        self.data = pd.read_pickle('../data/samples/dyari.pkl')
+        self.data = pd.read_pickle('dyari.pkl')
         self.train = self.data.sample(frac=0.8, random_state=200)
         self.test = self.data.drop(self.train.index)
         self.batch_size = batch_size
@@ -38,7 +37,7 @@ class Dataset():
         batch_y = []
 
         def lag_batch(_positions, _velocity, _energy, _edges):
-            time_lag = random.randint(self.time_lag, self.trajectory_length)
+            time_lag = random.randint(self.time_lag, (self.trajectory_length/sample_freq))
             _bx = []
             _by = []
             for time_step in range(time_lag-self.time_lag, time_lag):
@@ -66,14 +65,13 @@ class Net(torch.nn.Module):
         super(Net, self).__init__()
         self.fc1 = torch.nn.Linear(particles, 1)
         self.fc2 = torch.nn.Linear(1, features)
-        self.cn1 = torch.nn.Conv2d(time_slice, 1, 2, stride=2)
+        self.cn1 = torch.nn.Conv2d(time_slice, 1, 1, stride=1)
 
     def forward(self, x):
         x = self.fc1(x)
         x = self.fc2(x)
         x = self.cn1(x)
         return x
-
 
 class Model:
     def __init__(self):
@@ -95,7 +93,8 @@ class Model:
         return self.net.forward(torch.from_numpy(x).float())
 
     def train(self):
-        d = Dataset()
+        d = Data(batch_size=5, time_lag=time_slice)
+        entry = []
         for step in range(10000):
             x_train, target_train = d.get_batch(mode='train')
             x_test, target_test = d.get_batch(mode='test')
@@ -103,11 +102,17 @@ class Model:
                                    y_real=torch.from_numpy(target_train).float())
             test_loss = self.loss(y_prediction=self.predict(x_test),
                                   y_real=torch.from_numpy(target_test).float())
-            print(f'step {step}: {train_loss.item()}, {test_loss}')
+            print(f'step {step}: {train_loss.item()}, {test_loss.item()}')
 
             self.optimizer.zero_grad()
             train_loss.backward()
             self.optimizer.step()
+
+            entry.append({'time_step': step, 'loss': train_loss.item(), 'type': 'train'})
+            entry.append({'time_step': step, 'loss': test_loss.item(), 'type': 'test'})
+
+        sns.lineplot(data=pd.DataFrame(entry), x='time_step', y='loss', hue='type')
+        pyplot.show()
 
 
 def main():

@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import time
 import numpy as np
 import matplotlib.pyplot as plt
@@ -5,10 +8,8 @@ import pandas as pd
 import seaborn as sns
 
 
-
 class Spring:
 	def __init__(self, num_particles=2, interaction_strength=.1, dynamics='static', min_steps=50, max_steps=200):
-		np.random.seed(0)
 		self.num_particles = num_particles
 		self.interaction_strength = interaction_strength
 		self.dynamics = dynamics
@@ -20,8 +21,8 @@ class Spring:
 		self.vel_norm = .5
 		self.noise_var = 0.
 		
-		self.spring_prob = [0.5, 0.0, 0.5]
-		self._spring_types = np.array([0., 0.5, 1.])
+		self.spring_prob = [0.1, 0.1, 0.2, 0.5, 0.1]
+		self._spring_types = np.array([0.0, 0.2, 0.5, 0.7, 1.])
 		self._delta_T = 0.001
 		self._max_F = 0.1 / self._delta_T
 		
@@ -76,7 +77,7 @@ class Spring:
 		# Compute magnitude of this velocity vector and format to right shape
 		v_norm = np.linalg.norm(init_velocity, axis=0)
 
-		# Scale by magnitude ?
+		# Scale by magnitude
 		init_velocity = init_velocity * self.vel_norm / v_norm
 
 		return init_position, init_velocity
@@ -233,37 +234,15 @@ class Spring:
 				_u.append(0.5 * self.interaction_strength * pe)
 			potential_energies.append(pd.DataFrame({'potential_energy': _u, 'particles': self.columns}).set_index('particles'))
 
-
 		# Compute total energy of the system
 		total_energies = []
 		for time_step in range(len(potential_energies)):
 			total_en = kinetic_energies[time_step]['kinetic_energy'] + potential_energies[time_step]['potential_energy']
 			total_energies.append(pd.DataFrame({'total_energy': total_en, 'particles': self.columns}).set_index('particles'))
-		kinetic_energies = [ken.T for ken in kinetic_energies]
-		potential_energies = [pen.T for pen in potential_energies]
-		total_energies = [ten.T for ten in total_energies]
+		kinetic_energies = [_ken.T for _ken in kinetic_energies]
+		potential_energies = [_pen.T for _pen in potential_energies]
+		total_energies = [_ten.T for _ten in total_energies]
 		return kinetic_energies, potential_energies, total_energies
-	
-	def plot(self):
-		"""
-		This function plots position and energy over time.
-		:return:
-		"""
-		plt.figure()
-		axes = plt.gca()
-		axes.set_xlim([-5., 5.])
-		axes.set_ylim([-5., 5.])
-		positions = [position for position in self.positions]
-		positions = np.asarray(positions)
-		for i in range(positions.shape[-1]):
-			print(positions[:, 0, i], positions[:, 1, i])
-			plt.plot(positions[:, 0, i], positions[:, 1, i])
-			plt.plot(positions[0, 0, i], positions[0, 1, i], 'd')
-		plt.figure()
-		energies = self.get_energy()
-		plt.plot(energies)
-		plt.show()
-
 
 	def create_gif(self):
 		"""
@@ -289,23 +268,23 @@ class Spring:
 			entries = []
 			for particle_id in range(0, positions.shape[-1]):
 				data = {'particle': particle_id,
-						'x_dim': positions[time_step, 0, particle_id],
-						'y_dim': positions[time_step, 1, particle_id]}
+						'x_cordinate': positions[time_step, 0, particle_id],
+						'y_cordinate': positions[time_step, 1, particle_id]}
 				entries.append(data)
-			dframe = pd.DataFrame(entries)
+			pdframe = pd.DataFrame(entries)
 
-			pl = sns.scatterplot(data=dframe, x='x_dim', y='y_dim', hue='particle', ax=axes[0])
-
-			plh = sns.heatmap(self.edges[time_step], vmin=0, vmax=1, ax=axes[1])
+			pl = sns.scatterplot(data=pdframe, x='x_cordinate', y='y_cordinate', hue='particle', ax=axes[0])
+			sns.heatmap(self.edges[time_step], vmin=-1.0, vmax=1.0, ax=axes[1])
 
 			pl.set_ylim(-5.0, 5.0)
 			pl.set_xlim(-5.0, 5.0)
-
-			plt.savefig(f"/Users/naveenmysore/Documents/plots/timestep_{time_step}.png")
+			_path = '/Users/naveenmysore/Documents/plots'
+			plt.savefig(f"{_path}/timestep_{time_step}.png")
 			plt.clf()
 
 		# ref: https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif
-		img, *imgs = [Image.open(f"/Users/naveenmysore/Documents/plots/timestep_{i}.png") for i in range(0, len(self.positions))]
+		_path = '/Users/naveenmysore/Documents/plots'
+		img, *imgs = [Image.open(f"{_path}/timestep_{i}.png") for i in range(0, len(self.positions))]
 		img.save(fp=fp_out, format='GIF', append_images=imgs, save_all=True, duration=10, loop=0)
 
 		# delete all png files.
@@ -313,11 +292,54 @@ class Spring:
 			os.remove(f)
 
 
+def plot(data_frame):
+	"""
+	This function plots position and energy over time.
+	:return:
+	"""
+	particle_positions = []
+	for position in data_frame.positions:
+		print(position)
+		for particle_id in position.columns:
+			particle_positions.append({
+				'x_cordinate': position[particle_id]['x_cordinate'],
+				'y_cordinate': position[particle_id]['y_cordinate'],
+				'particle': particle_id
+			})
+	position_dframe = pd.DataFrame(particle_positions)
+
+	particle_velocity = []
+	for position in data_frame.velocity:
+		print(position)
+		for particle_id in position.columns:
+			particle_velocity.append({
+				'x_cordinate': position[particle_id]['x_cordinate'],
+				'y_cordinate': position[particle_id]['y_cordinate'],
+				'particle': particle_id
+			})
+	velocity_dframe = pd.DataFrame(particle_velocity)
+
+	edges = data_frame.edges
+	last_edges = edges[0]
+
+	fig, axes = plt.subplots(1, 3, figsize=(20, 6), sharey=False, sharex=False)
+	axes[0].set_title('Position')
+	axes[1].set_title('Velocity')
+	axes[2].set_title('Causality')
+
+	pl = sns.scatterplot(data=position_dframe, x='x_cordinate', y='y_cordinate', hue='particle', ax=axes[0])
+	pv = sns.scatterplot(data=velocity_dframe, x='x_cordinate', y='y_cordinate', hue='particle', ax=axes[1])
+	plh = sns.heatmap(last_edges, vmin=0, vmax=1, ax=axes[2])
+	pl.set_ylim(-5.0, 5.0)
+	pl.set_xlim(-5.0, 5.0)
+	plt.show()
+
+
 if __name__ == '__main__':
-	sim = Spring(num_particles=2, dynamics='periodic', min_steps=50, max_steps=200)
+	sim = Spring(num_particles=4, dynamics='static', min_steps=500, max_steps=1000)
 	t = time.time()
-	data_frame = sim.sample_trajectory(total_time_steps=1000, sample_freq=10)
-	#sim.plot()
+	data_frame = sim.sample_trajectory(total_time_steps=10000, sample_freq=50)
+	#plot(data_frame)
 	sim.create_gif()
 	print("Simulation time: {}".format(time.time() - t))
-	# sim.create_gif()
+	#sim.create_gif()
